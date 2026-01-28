@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 from orchestrator import Orchestrator
 from utils.i18n import get_text, get_available_languages
-from utils.template_manager import save_template, load_template, list_templates, delete_template
+from utils.template_manager import save_template, list_templates, delete_template
 from utils.report_generator import generate_pdf_report, generate_pptx_report
 from config.settings import (
     APP_TITLE,
@@ -32,13 +32,6 @@ st.set_page_config(page_title="AI Graph Generator", page_icon="\U0001f4ca", layo
 # -----------------------------------------------------------------------------
 # Constants
 # -----------------------------------------------------------------------------
-INITIAL_AI_MESSAGE = (
-    "こんにちは！どんな課題を解決したいですか？\n\n"
-    "例えば：\n"
-    "- 売上の傾向を把握したい\n"
-    "- 製造と出荷のバランスを見たい\n"
-    "- コスト削減のヒントがほしい"
-)
 
 # -----------------------------------------------------------------------------
 # Helper Functions
@@ -62,8 +55,6 @@ def _init_session_state():
             st.session_state[key] = value
     if "language" not in st.session_state:
         st.session_state.language = "ja"
-    if "templates" not in st.session_state:
-        st.session_state.templates = []
 
 
 def load_files(uploaded_files) -> dict[str, pd.DataFrame]:
@@ -72,17 +63,14 @@ def load_files(uploaded_files) -> dict[str, pd.DataFrame]:
     Validates file size and count limits. Raises ValueError on violation.
     """
     if len(uploaded_files) > MAX_FILES:
-        raise ValueError(f"ファイル数が上限を超えています（最大{MAX_FILES}ファイル）")
+        raise ValueError(t("too_many_files", max=MAX_FILES))
 
     result: dict[str, pd.DataFrame] = {}
     for f in uploaded_files:
         # Size check
         size_mb = f.size / (1024 * 1024)
         if size_mb > MAX_FILE_SIZE_MB:
-            raise ValueError(
-                f"{f.name} のサイズが上限を超えています "
-                f"({size_mb:.1f}MB > {MAX_FILE_SIZE_MB}MB)"
-            )
+            raise ValueError(t("file_too_large", name=f.name, max_mb=MAX_FILE_SIZE_MB))
 
         ext = os.path.splitext(f.name)[1].lower()
         if ext == ".csv":
@@ -90,7 +78,7 @@ def load_files(uploaded_files) -> dict[str, pd.DataFrame]:
         elif ext in (".xlsx", ".xls"):
             df = pd.read_excel(f)
         else:
-            raise ValueError(f"未対応のファイル形式: {ext}")
+            raise ValueError(f"Unsupported file format: {ext}")
 
         result[f.name] = df
 
@@ -137,7 +125,7 @@ def _ensure_orchestrator() -> Orchestrator | None:
 
     api_key = get_api_key()
     if not api_key:
-        st.error("APIキーが設定されていません。サイドバーから入力してください。")
+        st.error(t("error_no_api_key"))
         return None
 
     orch = Orchestrator(api_key=api_key)
@@ -151,7 +139,7 @@ def _ensure_orchestrator() -> Orchestrator | None:
 
 def render_sidebar():
     with st.sidebar:
-        st.header("設定")
+        st.header(t("settings"))
 
         # API key input if not in env / secrets
         env_key = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -162,10 +150,10 @@ def render_sidebar():
 
         if not env_key and not secret_key:
             st.text_input(
-                "Anthropic API Key",
+                t("api_key_label"),
                 type="password",
                 key="sidebar_api_key",
-                help="APIキーを入力してください",
+                help=t("api_key_help"),
             )
 
         st.divider()
@@ -174,21 +162,21 @@ def render_sidebar():
         mode = st.session_state.get("mode")
         step = st.session_state.get("step", "mode_select")
         if mode == SIMPLE_MODE:
-            st.info("モード: 簡単作成")
+            st.info(t("mode_label", mode=t("mode_simple")))
         elif mode == ADVANCED_MODE:
-            st.info("モード: 本気分析")
+            st.info(t("mode_label", mode=t("mode_advanced")))
         else:
-            st.info("モード未選択")
+            st.info(t("mode_not_selected"))
 
         step_labels = {
-            "mode_select": "モード選択",
-            "simple_upload": "ファイルアップロード",
-            "simple_result": "結果表示",
-            "advanced_hearing": "ヒアリング",
-            "advanced_proposals": "提案確認",
-            "advanced_result": "分析結果",
+            "mode_select": t("step_mode_select"),
+            "simple_upload": t("step_simple_upload"),
+            "simple_result": t("step_simple_result"),
+            "advanced_hearing": t("step_advanced_hearing"),
+            "advanced_proposals": t("step_advanced_proposals"),
+            "advanced_result": t("step_advanced_result"),
         }
-        st.caption(f"ステップ: {step_labels.get(step, step)}")
+        st.caption(t("step_label", step=step_labels.get(step, step)))
 
         st.divider()
 
@@ -206,7 +194,7 @@ def render_sidebar():
 
         st.divider()
 
-        if st.button("リセット", use_container_width=True):
+        if st.button(t("reset"), use_container_width=True):
             reset_session()
             st.rerun()
 
@@ -281,7 +269,7 @@ def render_simple_upload():
         t("upload_title"),
         accept_multiple_files=True,
         type=["xlsx", "xls", "csv"],
-        help="Excel (.xlsx, .xls) または CSV (.csv) ファイルを選択してください",
+        help=t("upload_file_help"),
     )
 
     if not uploaded:
@@ -294,7 +282,7 @@ def render_simple_upload():
         st.error(str(e))
         return
 
-    st.subheader("アップロードされたファイル")
+    st.subheader(t("uploaded_files"))
     for name, df in files.items():
         st.write(f"- **{name}**: {len(df)}行 x {len(df.columns)}列")
 
@@ -305,15 +293,15 @@ def render_simple_upload():
             return
 
         try:
-            with st.spinner("AIがデータを分析してグラフを生成しています..."):
-                charts = orch.run_simple_mode(files)
+            with st.spinner(t("generating")):
+                result = orch.run_simple_mode(files)
                 st.session_state.orchestrator = orch
                 st.session_state.files = files
-                st.session_state.charts = charts
+                st.session_state.charts = result["charts"]
                 st.session_state.step = "simple_result"
                 st.rerun()
         except Exception as e:
-            st.error(f"グラフ生成中にエラーが発生しました: {e}")
+            st.error(t("error_generation_failed", error=str(e)))
 
 
 # -----------------------------------------------------------------------------
@@ -322,7 +310,8 @@ def render_simple_upload():
 
 def _render_chart(chart: dict, prefix: str, idx: int):
     """Render a single chart card with downloads, customization, and template save."""
-    chart_title = chart.get("title", f"グラフ {idx + 1}")
+    proposal = chart.get("proposal", {})
+    chart_title = proposal.get("title", t("chart_default_title", index=idx + 1)) if isinstance(proposal, dict) else t("chart_default_title", index=idx + 1)
     chart_idx = f"{prefix}_{idx}"
     st.subheader(chart_title)
 
@@ -335,7 +324,7 @@ def _render_chart(chart: dict, prefix: str, idx: int):
         with dl_col1:
             html_str = pio.to_html(fig, full_html=True)
             st.download_button(
-                label="HTMLでダウンロード",
+                label=t("download_html_button"),
                 data=html_str,
                 file_name=f"{prefix}_{idx + 1}.html",
                 mime="text/html",
@@ -345,14 +334,14 @@ def _render_chart(chart: dict, prefix: str, idx: int):
             try:
                 img_bytes = fig.to_image(format="png")
                 st.download_button(
-                    label="PNGでダウンロード",
+                    label=t("download_png_button"),
                     data=img_bytes,
                     file_name=f"{prefix}_{idx + 1}.png",
                     mime="image/png",
                     key=f"{prefix}_dl_png_{idx}",
                 )
             except Exception:
-                st.caption("PNG出力にはkaleidoパッケージが必要です")
+                st.caption(t("png_requires_kaleido"))
 
         # Chart customization
         with st.expander(t("customize_title")):
@@ -399,12 +388,16 @@ def _render_chart(chart: dict, prefix: str, idx: int):
                         "code": chart.get("code", ""),
                     }
                     save_template(template_name, config)
-                    st.success(f"テンプレート '{template_name}' を保存しました")
+                    st.success(t("template_saved", name=template_name))
 
     # Proposal text
-    proposal = chart.get("proposal", "")
-    if proposal:
-        st.caption(proposal)
+    proposal_info = chart.get("proposal", "")
+    if isinstance(proposal_info, dict):
+        desc = proposal_info.get("description", "")
+        if desc:
+            st.caption(desc)
+    elif proposal_info:
+        st.caption(str(proposal_info))
 
     # Code display
     code = chart.get("code", "")
@@ -441,12 +434,12 @@ def render_simple_result():
             orch = st.session_state.get("orchestrator")
             if orch is not None:
                 try:
-                    with st.spinner("別のグラフを生成中..."):
-                        charts = orch.regenerate()
-                        st.session_state.charts = charts
+                    with st.spinner(t("regenerating")):
+                        result = orch.regenerate()
+                        st.session_state.charts = result["charts"]
                         st.rerun()
                 except Exception as e:
-                    st.error(f"再生成中にエラーが発生しました: {e}")
+                    st.error(t("error_regeneration", error=str(e)))
     with btn_col2:
         if st.button(t("back_to_start"), use_container_width=True):
             reset_session()
@@ -479,7 +472,7 @@ def _render_report_export():
                 mime="application/pdf",
             )
         except Exception as e:
-            st.warning(f"PDF生成に失敗: {e}")
+            st.warning(t("error_pdf", error=str(e)))
     with col_pptx:
         try:
             pptx_bytes = generate_pptx_report(
@@ -495,7 +488,7 @@ def _render_report_export():
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
             )
         except Exception as e:
-            st.warning(f"PPTX生成に失敗: {e}")
+            st.warning(t("error_pptx", error=str(e)))
 
 
 # -----------------------------------------------------------------------------
@@ -513,28 +506,28 @@ def _render_conversation():
 def render_advanced_hearing():
     col_header, col_btn = st.columns([8, 2])
     with col_header:
-        st.header("\U0001f52c 本気分析モード")
+        st.header(f"\U0001f52c {t('mode_advanced')}")
     with col_btn:
-        if st.button("モード変更"):
+        if st.button(t("change_mode")):
             reset_session()
             st.rerun()
 
     left, right = st.columns([3, 2], gap="large")
 
     with left:
-        st.subheader("ヒアリング")
+        st.subheader(t("hearing"))
 
         # Initialize conversation with first AI message
         conversation = st.session_state.get("conversation", [])
         if not conversation:
-            conversation = [{"role": "assistant", "content": INITIAL_AI_MESSAGE}]
+            conversation = [{"role": "assistant", "content": t("hearing_greeting")}]
             st.session_state.conversation = conversation
 
         # Display conversation
         _render_conversation()
 
         # Chat input
-        user_input = st.chat_input("メッセージを入力...")
+        user_input = st.chat_input(t("input_placeholder"))
         if user_input:
             # Add user message
             st.session_state.conversation.append({"role": "user", "content": user_input})
@@ -550,12 +543,12 @@ def render_advanced_hearing():
                     )
                 except Exception as e:
                     st.session_state.conversation.append(
-                        {"role": "assistant", "content": f"エラーが発生しました: {e}"}
+                        {"role": "assistant", "content": t("error_chat", error=str(e))}
                     )
             st.rerun()
 
     with right:
-        st.subheader("データアップロード")
+        st.subheader(t("data_upload"))
 
         # Show file uploader after at least one user message
         has_user_message = any(
@@ -563,11 +556,11 @@ def render_advanced_hearing():
         )
 
         if not has_user_message:
-            st.caption("まずはAIとの会話で課題を教えてください")
+            st.caption(t("please_share_goal"))
             return
 
         uploaded = st.file_uploader(
-            "データファイルをアップロード",
+            t("upload_data_file"),
             accept_multiple_files=True,
             type=["xlsx", "xls", "csv"],
             key="advanced_upload",
@@ -585,25 +578,25 @@ def render_advanced_hearing():
 
             st.session_state.files = files
 
-            if st.button("分析を開始", type="primary", use_container_width=True):
+            if st.button(t("start_analysis"), type="primary", use_container_width=True):
                 orch = _ensure_orchestrator()
                 if orch is None:
                     return
 
                 user_goal = st.session_state.get("user_goal", "")
                 try:
-                    with st.spinner("AIがデータを分析しています..."):
+                    with st.spinner(t("analyzing")):
                         result = orch.run_advanced_mode_analyze(files, user_goal)
                         st.session_state.analysis_result = result
                         st.session_state.conversation.append(
-                            {"role": "assistant", "content": "データを分析しました。提案をご確認ください。"}
+                            {"role": "assistant", "content": t("analysis_complete")}
                         )
                         st.session_state.step = "advanced_proposals"
                         st.rerun()
                 except Exception as e:
-                    st.error(f"分析中にエラーが発生しました: {e}")
+                    st.error(t("error_analysis_failed", error=str(e)))
         else:
-            st.caption("課題に関連するデータファイルをアップロードしてください")
+            st.caption(t("upload_related_data"))
 
 
 # -----------------------------------------------------------------------------
@@ -614,11 +607,11 @@ def render_advanced_proposals():
     left, right = st.columns([3, 2], gap="large")
 
     with left:
-        st.subheader("会話履歴")
+        st.subheader(t("conversation_history"))
         _render_conversation()
 
         # Continue chat
-        user_input = st.chat_input("追加のメッセージを入力...")
+        user_input = st.chat_input(t("additional_message_placeholder"))
         if user_input:
             st.session_state.conversation.append({"role": "user", "content": user_input})
             orch = st.session_state.get("orchestrator")
@@ -630,19 +623,19 @@ def render_advanced_proposals():
                     )
                 except Exception as e:
                     st.session_state.conversation.append(
-                        {"role": "assistant", "content": f"エラーが発生しました: {e}"}
+                        {"role": "assistant", "content": t("error_chat", error=str(e))}
                     )
             st.rerun()
 
     with right:
-        st.subheader("分析提案")
+        st.subheader(t("proposals_title"))
 
         analysis = st.session_state.get("analysis_result", {}) or {}
 
         # Data profile summary
         profile = analysis.get("data_profile")
         if profile:
-            with st.expander("データプロファイル", expanded=True):
+            with st.expander(t("data_profile_title"), expanded=True):
                 if isinstance(profile, dict):
                     for key, val in profile.items():
                         st.write(f"**{key}**: {val}")
@@ -652,38 +645,38 @@ def render_advanced_proposals():
         # Additional data suggestions
         suggestions = analysis.get("additional_data_suggestions", [])
         if suggestions:
-            with st.expander("追加データの提案"):
+            with st.expander(t("additional_data")):
                 for s in suggestions:
                     st.write(f"- {s}")
                 extra_upload = st.file_uploader(
-                    "追加データをアップロード",
+                    t("upload_additional_data"),
                     accept_multiple_files=True,
                     type=["xlsx", "xls", "csv"],
                     key="extra_upload",
                 )
-                if extra_upload and st.button("追加", key="add_extra_files"):
+                if extra_upload and st.button(t("add_data"), key="add_extra_files"):
                     orch = st.session_state.get("orchestrator")
                     if orch is not None:
                         try:
                             new_files = load_files(extra_upload)
                             orch.add_files(new_files)
                             st.session_state.files.update(new_files)
-                            st.success("ファイルを追加しました")
+                            st.success(t("files_added"))
                             st.rerun()
                         except Exception as e:
-                            st.error(f"ファイル追加エラー: {e}")
+                            st.error(t("error_file_add", error=str(e)))
 
         # Proposals as checkboxes
         proposals = analysis.get("proposals", [])
         selected = []
         if proposals:
-            st.markdown("#### 提案された分析")
+            st.markdown(f"#### {t('proposed_analyses')}")
             for j, prop in enumerate(proposals):
                 if isinstance(prop, str):
                     title = prop
                     description = ""
                 else:
-                    title = prop.get("title", f"提案 {j + 1}")
+                    title = prop.get("title", t("proposal_default_title", index=j + 1))
                     description = prop.get("description", "")
 
                 checked = st.checkbox(title, value=True, key=f"prop_{j}")
@@ -695,13 +688,13 @@ def render_advanced_proposals():
         # Action buttons
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
-            if st.button("選択した分析を実行", type="primary", use_container_width=True):
+            if st.button(t("run_selected"), type="primary", use_container_width=True):
                 if not selected:
-                    st.warning("少なくとも1つの提案を選択してください")
+                    st.warning(t("select_at_least_one"))
                 else:
                     _run_advanced_generate(selected)
         with btn_col2:
-            if st.button("全て作成", use_container_width=True):
+            if st.button(t("run_all"), use_container_width=True):
                 _run_advanced_generate(proposals)
 
 
@@ -709,17 +702,17 @@ def _run_advanced_generate(selected_proposals: list[dict]):
     """Execute advanced mode generation with selected proposals."""
     orch = st.session_state.get("orchestrator")
     if orch is None:
-        st.error("Orchestratorが初期化されていません。")
+        st.error(t("error_orchestrator"))
         return
     try:
-        with st.spinner("選択された分析を実行しています..."):
-            charts = orch.run_advanced_mode_generate(selected_proposals)
-            st.session_state.charts = charts
+        with st.spinner(t("running_analysis")):
+            result = orch.run_advanced_mode_generate(selected_proposals)
+            st.session_state.charts = result["charts"]
             st.session_state.selected_proposals = selected_proposals
             st.session_state.step = "advanced_result"
             st.rerun()
     except Exception as e:
-        st.error(f"分析実行中にエラーが発生しました: {e}")
+        st.error(t("error_analysis_exec", error=str(e)))
 
 
 # -----------------------------------------------------------------------------
@@ -730,10 +723,10 @@ def render_advanced_result():
     left, right = st.columns([3, 2], gap="large")
 
     with left:
-        st.subheader("会話履歴")
+        st.subheader(t("conversation_history"))
         _render_conversation()
 
-        user_input = st.chat_input("追加の質問を入力...")
+        user_input = st.chat_input(t("additional_question_placeholder"))
         if user_input:
             st.session_state.conversation.append({"role": "user", "content": user_input})
             orch = st.session_state.get("orchestrator")
@@ -745,7 +738,7 @@ def render_advanced_result():
                     )
                 except Exception as e:
                     st.session_state.conversation.append(
-                        {"role": "assistant", "content": f"エラーが発生しました: {e}"}
+                        {"role": "assistant", "content": t("error_chat", error=str(e))}
                     )
             st.rerun()
 
@@ -760,7 +753,7 @@ def render_advanced_result():
                 _render_chart(chart, "adv", i)
 
                 # Insights
-                insights_data = chart.get("insights", {})
+                insights_data = chart.get("insights") or chart.get("insight", {})
                 if isinstance(insights_data, dict):
                     insight_list = insights_data.get("insights", [])
                     recommendations = insights_data.get("recommendations", [])
@@ -819,7 +812,7 @@ def main():
     if renderer:
         renderer()
     else:
-        st.error(f"不明なステップ: {step}")
+        st.error(t("error_unknown_step", step=step))
         reset_session()
         st.rerun()
 

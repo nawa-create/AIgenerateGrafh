@@ -93,8 +93,9 @@ class Orchestrator:
 
         # 優先度上位3件を選択
         proposal_list = proposals if isinstance(proposals, list) else proposals.get("proposals", [])
+        priority_map = {"high": 3, "medium": 2, "low": 1}
         top_proposals = sorted(
-            proposal_list, key=lambda p: p.get("priority", 0), reverse=True
+            proposal_list, key=lambda p: priority_map.get(p.get("priority", "low"), 0), reverse=True
         )[:3]
 
         # Agent 3: コード生成・グラフ実行
