@@ -6,9 +6,13 @@ import os
 import streamlit as st
 import pandas as pd
 import plotly.io as pio
+from datetime import datetime
 from dotenv import load_dotenv
 
 from orchestrator import Orchestrator
+from utils.i18n import get_text, get_available_languages
+from utils.template_manager import save_template, load_template, list_templates, delete_template
+from utils.report_generator import generate_pdf_report, generate_pptx_report
 from config.settings import (
     APP_TITLE,
     SIMPLE_MODE,
@@ -56,6 +60,10 @@ def _init_session_state():
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+    if "language" not in st.session_state:
+        st.session_state.language = "ja"
+    if "templates" not in st.session_state:
+        st.session_state.templates = []
 
 
 def load_files(uploaded_files) -> dict[str, pd.DataFrame]:
@@ -106,6 +114,11 @@ def get_api_key() -> str:
 
     # 3. Sidebar input
     return st.session_state.get("sidebar_api_key", "")
+
+
+def t(key, **kwargs):
+    """Shortcut for i18n text lookup."""
+    return get_text(key, st.session_state.get("language", "ja"), **kwargs)
 
 
 def reset_session():
@@ -179,9 +192,36 @@ def render_sidebar():
 
         st.divider()
 
+        # Language selector
+        lang_options = get_available_languages()
+        selected_lang = st.selectbox(
+            get_text("language", st.session_state.language),
+            options=list(lang_options.keys()),
+            format_func=lambda x: lang_options[x],
+            index=list(lang_options.keys()).index(st.session_state.language)
+        )
+        if selected_lang != st.session_state.language:
+            st.session_state.language = selected_lang
+            st.rerun()
+
+        st.divider()
+
         if st.button("リセット", use_container_width=True):
             reset_session()
             st.rerun()
+
+        st.divider()
+        st.subheader(t("saved_templates"))
+        templates = list_templates()
+        if templates:
+            for tmpl in templates[:5]:
+                col_t1, col_t2 = st.columns([3, 1])
+                col_t1.write(tmpl["name"])
+                if col_t2.button("🗑️", key=f"del_{tmpl['id']}"):
+                    delete_template(tmpl["id"])
+                    st.rerun()
+        else:
+            st.caption(t("no_templates"))
 
 
 # -----------------------------------------------------------------------------
@@ -190,13 +230,13 @@ def render_sidebar():
 
 def render_mode_select():
     st.markdown(
-        f"<h1 style='text-align:center;'>\U0001f4ca {APP_TITLE}</h1>",
+        f"<h1 style='text-align:center;'>\U0001f4ca {t('app_title')}</h1>",
         unsafe_allow_html=True,
     )
     st.markdown(
-        "<p style='text-align:center; color:gray;'>"
-        "データをアップロードするだけで、AIが最適なグラフを自動生成します"
-        "</p>",
+        f"<p style='text-align:center; color:gray;'>"
+        f"{t('app_subtitle')}"
+        f"</p>",
         unsafe_allow_html=True,
     )
 
@@ -204,27 +244,21 @@ def render_mode_select():
     col_left, col_right = st.columns(2, gap="large")
 
     with col_left:
-        st.markdown("### \u26a1 簡単作成")
-        st.markdown("**とりあえずグラフを作りたい**")
-        st.caption("所要時間: 1〜2分")
-        st.markdown(
-            "ファイルをアップロードするだけで、AIがデータを読み取り"
-            "最適なグラフを自動で提案・生成します。"
-        )
-        if st.button("簡単作成を始める", use_container_width=True, type="primary"):
+        st.markdown(f"### \u26a1 {t('simple_mode_name')}")
+        st.markdown(f"**{t('simple_mode_desc')}**")
+        st.caption(t("simple_mode_time"))
+        st.markdown(t("simple_mode_detail"))
+        if st.button(t("start_simple"), use_container_width=True, type="primary"):
             st.session_state.mode = SIMPLE_MODE
             st.session_state.step = "simple_upload"
             st.rerun()
 
     with col_right:
-        st.markdown("### \U0001f52c 本気分析")
-        st.markdown("**課題を深掘りして最適な分析を行う**")
-        st.caption("所要時間: 5〜10分")
-        st.markdown(
-            "AIとの対話を通じて課題を明確にし、データに基づいた"
-            "深い分析とインサイトを得られます。"
-        )
-        if st.button("本気分析を始める", use_container_width=True, type="primary"):
+        st.markdown(f"### \U0001f52c {t('advanced_mode_name')}")
+        st.markdown(f"**{t('advanced_mode_desc')}**")
+        st.caption(t("advanced_mode_time"))
+        st.markdown(t("advanced_mode_detail"))
+        if st.button(t("start_advanced"), use_container_width=True, type="primary"):
             st.session_state.mode = ADVANCED_MODE
             st.session_state.step = "advanced_hearing"
             st.rerun()
@@ -237,14 +271,14 @@ def render_mode_select():
 def render_simple_upload():
     col_header, col_btn = st.columns([8, 2])
     with col_header:
-        st.header("\u26a1 簡単作成モード")
+        st.header(f"\u26a1 {t('simple_mode_name')}")
     with col_btn:
-        if st.button("モード変更"):
+        if st.button(t("change_mode")):
             reset_session()
             st.rerun()
 
     uploaded = st.file_uploader(
-        "データファイルをアップロード",
+        t("upload_title"),
         accept_multiple_files=True,
         type=["xlsx", "xls", "csv"],
         help="Excel (.xlsx, .xls) または CSV (.csv) ファイルを選択してください",
@@ -265,7 +299,7 @@ def render_simple_upload():
         st.write(f"- **{name}**: {len(df)}行 x {len(df.columns)}列")
 
     st.write("")
-    if st.button("グラフを自動生成", type="primary", use_container_width=True):
+    if st.button(t("generate"), type="primary", use_container_width=True):
         orch = _ensure_orchestrator()
         if orch is None:
             return
@@ -287,8 +321,10 @@ def render_simple_upload():
 # -----------------------------------------------------------------------------
 
 def _render_chart(chart: dict, prefix: str, idx: int):
-    """Render a single chart card with downloads and code."""
-    st.subheader(chart.get("title", f"グラフ {idx + 1}"))
+    """Render a single chart card with downloads, customization, and template save."""
+    chart_title = chart.get("title", f"グラフ {idx + 1}")
+    chart_idx = f"{prefix}_{idx}"
+    st.subheader(chart_title)
 
     fig = chart.get("figure")
     if fig is not None:
@@ -318,6 +354,53 @@ def _render_chart(chart: dict, prefix: str, idx: int):
             except Exception:
                 st.caption("PNG出力にはkaleidoパッケージが必要です")
 
+        # Chart customization
+        with st.expander(t("customize_title")):
+            new_title = st.text_input(
+                t("chart_title_label"),
+                value=chart_title,
+                key=f"title_{chart_idx}"
+            )
+            color_schemes = {
+                "plotly": "Plotly Default",
+                "ggplot2": "ggplot2",
+                "seaborn": "Seaborn",
+                "plotly_white": "White",
+                "plotly_dark": "Dark",
+                "presentation": "Presentation",
+            }
+            selected_scheme = st.selectbox(
+                t("color_scheme"),
+                options=list(color_schemes.keys()),
+                format_func=lambda x: color_schemes[x],
+                key=f"scheme_{chart_idx}"
+            )
+            if st.button(t("apply_changes"), key=f"apply_{chart_idx}"):
+                fig.update_layout(
+                    title_text=new_title,
+                    template=selected_scheme
+                )
+                st.rerun()
+
+        # Template save
+        with st.expander(t("save_template")):
+            template_name = st.text_input(
+                t("template_name"),
+                key=f"tmpl_name_{chart_idx}"
+            )
+            if st.button(t("save_template"), key=f"save_tmpl_{chart_idx}"):
+                if template_name:
+                    config = {
+                        "proposal": chart.get("proposal", {}),
+                        "customization": {
+                            "title": new_title,
+                            "color_scheme": selected_scheme,
+                        },
+                        "code": chart.get("code", ""),
+                    }
+                    save_template(template_name, config)
+                    st.success(f"テンプレート '{template_name}' を保存しました")
+
     # Proposal text
     proposal = chart.get("proposal", "")
     if proposal:
@@ -326,32 +409,35 @@ def _render_chart(chart: dict, prefix: str, idx: int):
     # Code display
     code = chart.get("code", "")
     if code:
-        with st.expander("生成されたコードを表示"):
+        with st.expander(t("generated_code")):
             st.code(code, language="python")
 
 
 def render_simple_result():
     col_header, col_btn = st.columns([8, 2])
     with col_header:
-        st.header("\u26a1 簡単作成 - 結果")
+        st.header(f"\u26a1 {t('simple_mode_name')} - {t('generated_charts')}")
     with col_btn:
-        if st.button("モード変更"):
+        if st.button(t("change_mode")):
             reset_session()
             st.rerun()
 
     charts = st.session_state.get("charts", [])
 
     if not charts:
-        st.warning("生成されたグラフがありません。")
+        st.warning(t("no_charts"))
     else:
         for i, chart in enumerate(charts):
             _render_chart(chart, "simple", i)
             st.divider()
 
+    # Report export
+    _render_report_export()
+
     # Action buttons
     btn_col1, btn_col2 = st.columns(2)
     with btn_col1:
-        if st.button("別のグラフを提案", use_container_width=True):
+        if st.button(t("regenerate"), use_container_width=True):
             orch = st.session_state.get("orchestrator")
             if orch is not None:
                 try:
@@ -362,9 +448,54 @@ def render_simple_result():
                 except Exception as e:
                     st.error(f"再生成中にエラーが発生しました: {e}")
     with btn_col2:
-        if st.button("最初に戻る", use_container_width=True):
+        if st.button(t("back_to_start"), use_container_width=True):
             reset_session()
             st.rerun()
+
+
+# -----------------------------------------------------------------------------
+# Report Export Helper
+# -----------------------------------------------------------------------------
+
+def _render_report_export():
+    """Render PDF and PPTX export buttons."""
+    charts = st.session_state.get("charts", [])
+    if not charts:
+        return
+    st.divider()
+    col_pdf, col_pptx = st.columns(2)
+    with col_pdf:
+        try:
+            pdf_bytes = generate_pdf_report(
+                charts=charts,
+                data_profile=getattr(st.session_state.get("orchestrator"), "_data_profile", None),
+                title=t("report_title"),
+                subtitle=t("report_generated_by"),
+            )
+            st.download_button(
+                label=t("download_pdf"),
+                data=pdf_bytes,
+                file_name=f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                mime="application/pdf",
+            )
+        except Exception as e:
+            st.warning(f"PDF生成に失敗: {e}")
+    with col_pptx:
+        try:
+            pptx_bytes = generate_pptx_report(
+                charts=charts,
+                data_profile=getattr(st.session_state.get("orchestrator"), "_data_profile", None),
+                title=t("report_title"),
+                subtitle=t("report_generated_by"),
+            )
+            st.download_button(
+                label=t("download_pptx"),
+                data=pptx_bytes,
+                file_name=f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pptx",
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            )
+        except Exception as e:
+            st.warning(f"PPTX生成に失敗: {e}")
 
 
 # -----------------------------------------------------------------------------
@@ -619,11 +750,11 @@ def render_advanced_result():
             st.rerun()
 
     with right:
-        st.subheader("分析結果")
+        st.subheader(t("generated_charts"))
         charts = st.session_state.get("charts", [])
 
         if not charts:
-            st.warning("生成されたグラフがありません。")
+            st.warning(t("no_charts"))
         else:
             for i, chart in enumerate(charts):
                 _render_chart(chart, "adv", i)
@@ -656,8 +787,11 @@ def render_advanced_result():
 
                 st.divider()
 
+        # Report export
+        _render_report_export()
+
         # Bottom action buttons
-        if st.button("最初に戻る", use_container_width=True):
+        if st.button(t("back_to_start"), use_container_width=True):
             reset_session()
             st.rerun()
 
