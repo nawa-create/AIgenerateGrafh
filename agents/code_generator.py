@@ -95,7 +95,7 @@ class CodeGeneratorAgent:
 
             exec_result = execute_code(code, variables)
 
-            figure = exec_result.get("fig")
+            figure = exec_result.get("figure")
             chart_html = None
             if figure is not None:
                 try:

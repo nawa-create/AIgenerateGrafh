@@ -1,7 +1,9 @@
 """安全なコード実行エンジン - 生成されたPlotlyコードをサンドボックス内で実行する。"""
 
 import io
+import re
 import signal
+import sys
 import traceback
 
 import numpy as np
@@ -39,7 +41,9 @@ def execute_code(
     """
     # ブロック対象の操作を検証する
     for blocked in BLOCKED_OPERATIONS:
-        if blocked in code:
+        # Use word boundary matching to reduce false positives
+        pattern = re.escape(blocked)
+        if re.search(r'(?<!\w)' + pattern, code):
             return {
                 "success": False,
                 "figure": None,
@@ -72,7 +76,12 @@ def execute_code(
         old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
         signal.alarm(effective_timeout)
 
-        exec(code, namespace)  # noqa: S102
+        old_stdout = sys.stdout
+        sys.stdout = stdout_capture
+        try:
+            exec(code, namespace)  # noqa: S102
+        finally:
+            sys.stdout = old_stdout
 
         signal.alarm(0)
 

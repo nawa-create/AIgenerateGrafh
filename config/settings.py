@@ -17,19 +17,15 @@ TIMEOUT_SECONDS = 30
 MAX_MEMORY_MB = 512
 
 BLOCKED_OPERATIONS = [
-    "exec",
-    "eval",
-    "compile",
+    "import os",
+    "import subprocess",
+    "import sys",
+    "import shutil",
     "__import__",
-    "open",
-    "os.system",
-    "subprocess",
-    "shutil.rmtree",
-    "os.remove",
-    "os.rmdir",
-    "os.unlink",
-    "pathlib.Path.unlink",
-    "pathlib.Path.rmdir",
+    "exec(",
+    "eval(",
+    "open(",
+    "compile(",
 ]
 
 ALLOWED_MODULES = [

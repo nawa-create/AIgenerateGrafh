@@ -153,21 +153,21 @@ class VisualizationProposerAgent:
         proposals = []
         proposal_id = 0
 
-        files_info = data_profile.get("files", {})
+        files_info = data_profile.get("files", [])
         if not files_info:
             # files キーが無い場合はトップレベルを1ファイル分として扱う
-            files_info = {"data": data_profile}
+            files_info = [{"name": "data", "columns": data_profile.get("columns", [])}]
 
-        for filename, file_profile in files_info.items():
-            columns = file_profile.get("columns", {})
+        for file_profile in files_info:
+            filename = file_profile.get("name", "data")
+            columns_list = file_profile.get("columns", [])
 
-            date_cols = [c for c, info in columns.items() if info.get("type") in ("datetime", "date")]
-            numeric_cols = [c for c, info in columns.items() if info.get("type") in ("int64", "float64", "numeric", "number")]
-            category_cols = [
-                c
-                for c, info in columns.items()
-                if info.get("type") in ("object", "category", "string", "categorical")
-            ]
+            date_cols = [c["name"] for c in columns_list if c.get("type") in ("datetime", "date")]
+            numeric_cols = [c["name"] for c in columns_list if c.get("type") in ("int64", "float64", "numeric", "number")]
+            category_cols = [c["name"] for c in columns_list if c.get("type") in ("object", "category", "string", "categorical")]
+
+            # Build a lookup for unique_count by column name
+            col_lookup = {c["name"]: c for c in columns_list}
 
             # 日付 + 数値 → 折れ線グラフ
             for date_col in date_cols:
@@ -189,7 +189,7 @@ class VisualizationProposerAgent:
 
             # カテゴリ + 数値 → 棒グラフ
             for cat_col in category_cols:
-                unique_count = columns[cat_col].get("unique_count", 999)
+                unique_count = col_lookup[cat_col].get("unique_count", 999)
                 for num_col in numeric_cols:
                     proposal_id += 1
                     chart_type = "pie" if unique_count < 8 and not date_cols else "bar"

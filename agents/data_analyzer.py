@@ -58,10 +58,30 @@ class DataAnalyzerAgent:
         for col in df.columns:
             columns.append(self._profile_column(col, df[col]))
 
+        # Correlation matrix for numeric columns
+        numeric_df = df.select_dtypes(include="number")
+        correlations = {}
+        if len(numeric_df.columns) >= 2:
+            corr_matrix = numeric_df.corr()
+            correlations = {
+                str(col): {str(k): self._to_python(v) for k, v in row.items()}
+                for col, row in corr_matrix.to_dict().items()
+            }
+
+        # Data quality metrics
+        total_cells = len(df) * len(df.columns)
+        missing_cells = int(df.isna().sum().sum())
+        quality = {
+            "missing_percentage": round(missing_cells / total_cells * 100, 2) if total_cells > 0 else 0.0,
+            "duplicate_rows": int(df.duplicated().sum()),
+        }
+
         return {
             "name": name,
             "rows": len(df),
             "columns": columns,
+            "correlations": correlations,
+            "quality": quality,
         }
 
     def _profile_column(self, name: str, series: pd.Series) -> dict:
@@ -135,7 +155,7 @@ class DataAnalyzerAgent:
             non_null = series.dropna()
             if len(non_null) > 0:
                 try:
-                    parsed = pd.to_datetime(non_null, errors="coerce", infer_datetime_format=True)
+                    parsed = pd.to_datetime(non_null, errors="coerce")
                     success_ratio = parsed.notna().sum() / len(non_null)
                     if success_ratio > 0.8:
                         return "date"
