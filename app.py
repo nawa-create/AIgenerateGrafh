@@ -86,8 +86,13 @@ def load_files(uploaded_files) -> dict[str, pd.DataFrame]:
 
 
 def get_api_key() -> str:
-    """Retrieve API key from secrets, environment, or sidebar input."""
-    # 1. Streamlit secrets
+    """Retrieve API key with priority: user override → secrets → env."""
+    # 1. User override from sidebar (highest priority)
+    user_key = st.session_state.get("sidebar_api_key", "")
+    if user_key:
+        return user_key
+
+    # 2. Streamlit secrets
     try:
         key = st.secrets.get("ANTHROPIC_API_KEY", "")
         if key:
@@ -95,13 +100,8 @@ def get_api_key() -> str:
     except Exception:
         pass
 
-    # 2. Environment variable
-    key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if key:
-        return key
-
-    # 3. Sidebar input
-    return st.session_state.get("sidebar_api_key", "")
+    # 3. Environment variable
+    return os.environ.get("ANTHROPIC_API_KEY", "")
 
 
 def t(key, **kwargs):
@@ -141,14 +141,25 @@ def render_sidebar():
     with st.sidebar:
         st.header(t("settings"))
 
-        # API key input if not in env / secrets
+        # API key section
         env_key = os.environ.get("ANTHROPIC_API_KEY", "")
         try:
             secret_key = st.secrets.get("ANTHROPIC_API_KEY", "")
         except Exception:
             secret_key = ""
 
-        if not env_key and not secret_key:
+        has_system_key = bool(env_key or secret_key)
+
+        if has_system_key:
+            st.success(t("system_api_key_active"))
+            with st.expander(t("use_own_key")):
+                st.text_input(
+                    t("api_key_label"),
+                    type="password",
+                    key="sidebar_api_key",
+                    help=t("api_key_override_help"),
+                )
+        else:
             st.text_input(
                 t("api_key_label"),
                 type="password",

@@ -100,7 +100,10 @@ TRANSLATIONS = {
         # Sidebar
         "settings": "設定",
         "api_key_label": "Anthropic APIキー",
-        "api_key_help": "APIキーを入力してください",
+        "api_key_help": "Anthropic APIキーを入力してください。console.anthropic.com で取得できます。",
+        "api_key_override_help": "自分のキーを入力すると、システムキーの代わりに使用されます",
+        "system_api_key_active": "システムAPIキーが設定済みです",
+        "use_own_key": "自分のAPIキーを使う",
         "current_mode": "現在のモード",
         "mode_label": "モード: {mode}",
         "mode_not_selected": "モード未選択",
@@ -242,7 +245,10 @@ TRANSLATIONS = {
         # Sidebar
         "settings": "Settings",
         "api_key_label": "Anthropic API Key",
-        "api_key_help": "Please enter your API key",
+        "api_key_help": "Enter your Anthropic API key. Get one at console.anthropic.com",
+        "api_key_override_help": "Enter your own key to use instead of the system key",
+        "system_api_key_active": "System API key is configured",
+        "use_own_key": "Use your own API key",
         "current_mode": "Current Mode",
         "mode_label": "Mode: {mode}",
         "mode_not_selected": "Mode not selected",
