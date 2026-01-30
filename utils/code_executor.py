@@ -2,8 +2,8 @@
 
 import io
 import re
-import signal
 import sys
+import threading
 import traceback
 
 import numpy as np
@@ -13,11 +13,6 @@ import plotly.graph_objects as go
 import plotly.subplots
 
 from config.settings import BLOCKED_OPERATIONS, TIMEOUT_SECONDS
-
-
-def _timeout_handler(signum, frame):
-    """タイムアウト時に呼び出されるシグナルハンドラ。"""
-    raise TimeoutError("コードの実行がタイムアウトしました。")
 
 
 def execute_code(
@@ -41,7 +36,6 @@ def execute_code(
     """
     # ブロック対象の操作を検証する
     for blocked in BLOCKED_OPERATIONS:
-        # Use word boundary matching to reduce false positives
         pattern = re.escape(blocked)
         if re.search(r'(?<!\w)' + pattern, code):
             return {
@@ -64,60 +58,55 @@ def execute_code(
     for i, (name, df) in enumerate(dataframes.items()):
         namespace[f"df_{i}"] = df.copy()
 
-    # 標準出力をキャプチャする
-    stdout_capture = io.StringIO()
-
-    # タイムアウトを設定する
+    # スレッドベースのタイムアウト実行
     effective_timeout = min(timeout, TIMEOUT_SECONDS)
-    old_handler = None
+    stdout_capture = io.StringIO()
+    result_holder = {"error": None}
 
-    try:
-        # Linuxではsignal.alarmでタイムアウトを設定する
-        old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
-        signal.alarm(effective_timeout)
-
+    def _run():
         old_stdout = sys.stdout
         sys.stdout = stdout_capture
         try:
             exec(code, namespace)  # noqa: S102
+        except Exception:
+            result_holder["error"] = traceback.format_exc()
         finally:
             sys.stdout = old_stdout
 
-        signal.alarm(0)
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    thread.join(timeout=effective_timeout)
 
-        # figを名前空間から取得する（複数の変数名に対応）
-        figure = namespace.get("fig", None)
-        if figure is None:
-            figure = namespace.get("figure", None)
-        if figure is None:
-            # 名前空間からPlotlyフィギュアオブジェクトを探す
-            for val in namespace.values():
-                if hasattr(val, "to_html") and hasattr(val, "update_layout"):
-                    figure = val
-                    break
-
-        return {
-            "success": True,
-            "figure": figure,
-            "error": None,
-            "output": stdout_capture.getvalue(),
-        }
-
-    except TimeoutError as e:
+    if thread.is_alive():
         return {
             "success": False,
             "figure": None,
-            "error": str(e),
+            "error": "コードの実行がタイムアウトしました。",
             "output": stdout_capture.getvalue(),
         }
-    except Exception:
+
+    if result_holder["error"] is not None:
         return {
             "success": False,
             "figure": None,
-            "error": traceback.format_exc(),
+            "error": result_holder["error"],
             "output": stdout_capture.getvalue(),
         }
-    finally:
-        if old_handler is not None:
-            signal.alarm(0)
-            signal.signal(signal.SIGALRM, old_handler)
+
+    # figを名前空間から取得する（複数の変数名に対応）
+    figure = namespace.get("fig", None)
+    if figure is None:
+        figure = namespace.get("figure", None)
+    if figure is None:
+        # 名前空間からPlotlyフィギュアオブジェクトを探す
+        for val in namespace.values():
+            if hasattr(val, "to_html") and hasattr(val, "update_layout"):
+                figure = val
+                break
+
+    return {
+        "success": True,
+        "figure": figure,
+        "error": None,
+        "output": stdout_capture.getvalue(),
+    }
