@@ -337,8 +337,14 @@ def _render_chart(chart: dict, prefix: str, idx: int):
     st.subheader(chart_title)
 
     fig = chart.get("figure")
+    error = chart.get("error")
+
     if fig is not None:
         st.plotly_chart(fig, use_container_width=True, key=f"{prefix}_chart_{idx}")
+    elif error:
+        st.error(f"グラフ生成エラー: {error}")
+    else:
+        st.warning("グラフが生成されませんでした。コードを確認してください。")
 
         # Download buttons
         dl_col1, dl_col2 = st.columns(2)

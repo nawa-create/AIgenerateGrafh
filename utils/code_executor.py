@@ -85,8 +85,16 @@ def execute_code(
 
         signal.alarm(0)
 
-        # figを名前空間から取得する
+        # figを名前空間から取得する（複数の変数名に対応）
         figure = namespace.get("fig", None)
+        if figure is None:
+            figure = namespace.get("figure", None)
+        if figure is None:
+            # 名前空間からPlotlyフィギュアオブジェクトを探す
+            for val in namespace.values():
+                if hasattr(val, "to_html") and hasattr(val, "update_layout"):
+                    figure = val
+                    break
 
         return {
             "success": True,
