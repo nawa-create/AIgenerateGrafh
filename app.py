@@ -74,7 +74,15 @@ def load_files(uploaded_files) -> dict[str, pd.DataFrame]:
 
         ext = os.path.splitext(f.name)[1].lower()
         if ext == ".csv":
-            df = pd.read_csv(f)
+            for encoding in ("utf-8", "shift_jis", "cp932", "euc-jp", "iso-2022-jp", "latin-1"):
+                try:
+                    f.seek(0)
+                    df = pd.read_csv(f, encoding=encoding)
+                    break
+                except (UnicodeDecodeError, UnicodeError):
+                    continue
+            else:
+                raise ValueError(f"CSV文字コードを自動判定できませんでした: {f.name}")
         elif ext in (".xlsx", ".xls"):
             df = pd.read_excel(f)
         else:
