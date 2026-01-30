@@ -197,7 +197,8 @@ def render_sidebar():
             get_text("language", st.session_state.language),
             options=list(lang_options.keys()),
             format_func=lambda x: lang_options[x],
-            index=list(lang_options.keys()).index(st.session_state.language)
+            index=list(lang_options.keys()).index(st.session_state.language),
+            key="sidebar_language_select",
         )
         if selected_lang != st.session_state.language:
             st.session_state.language = selected_lang
@@ -205,7 +206,7 @@ def render_sidebar():
 
         st.divider()
 
-        if st.button(t("reset"), use_container_width=True):
+        if st.button(t("reset"), use_container_width=True, key="btn_reset"):
             reset_session()
             st.rerun()
 
@@ -247,7 +248,7 @@ def render_mode_select():
         st.markdown(f"**{t('simple_mode_desc')}**")
         st.caption(t("simple_mode_time"))
         st.markdown(t("simple_mode_detail"))
-        if st.button(t("start_simple"), use_container_width=True, type="primary"):
+        if st.button(t("start_simple"), use_container_width=True, type="primary", key="btn_start_simple"):
             st.session_state.mode = SIMPLE_MODE
             st.session_state.step = "simple_upload"
             st.rerun()
@@ -257,7 +258,7 @@ def render_mode_select():
         st.markdown(f"**{t('advanced_mode_desc')}**")
         st.caption(t("advanced_mode_time"))
         st.markdown(t("advanced_mode_detail"))
-        if st.button(t("start_advanced"), use_container_width=True, type="primary"):
+        if st.button(t("start_advanced"), use_container_width=True, type="primary", key="btn_start_advanced"):
             st.session_state.mode = ADVANCED_MODE
             st.session_state.step = "advanced_hearing"
             st.rerun()
@@ -272,7 +273,7 @@ def render_simple_upload():
     with col_header:
         st.header(f"\u26a1 {t('simple_mode_name')}")
     with col_btn:
-        if st.button(t("change_mode")):
+        if st.button(t("change_mode"), key="btn_change_mode_simple_upload"):
             reset_session()
             st.rerun()
 
@@ -281,6 +282,7 @@ def render_simple_upload():
         accept_multiple_files=True,
         type=["xlsx", "xls", "csv"],
         help=t("upload_file_help"),
+        key="upload_simple",
     )
 
     if not uploaded:
@@ -298,7 +300,7 @@ def render_simple_upload():
         st.write(f"- **{name}**: {len(df)}行 x {len(df.columns)}列")
 
     st.write("")
-    if st.button(t("generate"), type="primary", use_container_width=True):
+    if st.button(t("generate"), type="primary", use_container_width=True, key="btn_generate_simple"):
         orch = _ensure_orchestrator()
         if orch is None:
             return
@@ -422,7 +424,7 @@ def render_simple_result():
     with col_header:
         st.header(f"\u26a1 {t('simple_mode_name')} - {t('generated_charts')}")
     with col_btn:
-        if st.button(t("change_mode")):
+        if st.button(t("change_mode"), key="btn_change_mode_simple_result"):
             reset_session()
             st.rerun()
 
@@ -436,12 +438,12 @@ def render_simple_result():
             st.divider()
 
     # Report export
-    _render_report_export()
+    _render_report_export(prefix="simple")
 
     # Action buttons
     btn_col1, btn_col2 = st.columns(2)
     with btn_col1:
-        if st.button(t("regenerate"), use_container_width=True):
+        if st.button(t("regenerate"), use_container_width=True, key="btn_regenerate_simple"):
             orch = st.session_state.get("orchestrator")
             if orch is not None:
                 try:
@@ -452,7 +454,7 @@ def render_simple_result():
                 except Exception as e:
                     st.error(t("error_regeneration", error=str(e)))
     with btn_col2:
-        if st.button(t("back_to_start"), use_container_width=True):
+        if st.button(t("back_to_start"), use_container_width=True, key="btn_back_simple_result"):
             reset_session()
             st.rerun()
 
@@ -461,7 +463,7 @@ def render_simple_result():
 # Report Export Helper
 # -----------------------------------------------------------------------------
 
-def _render_report_export():
+def _render_report_export(prefix: str = "report"):
     """Render PDF and PPTX export buttons."""
     charts = st.session_state.get("charts", [])
     if not charts:
@@ -481,6 +483,7 @@ def _render_report_export():
                 data=pdf_bytes,
                 file_name=f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
                 mime="application/pdf",
+                key=f"dl_pdf_{prefix}",
             )
         except Exception as e:
             st.warning(t("error_pdf", error=str(e)))
@@ -497,6 +500,7 @@ def _render_report_export():
                 data=pptx_bytes,
                 file_name=f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pptx",
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                key=f"dl_pptx_{prefix}",
             )
         except Exception as e:
             st.warning(t("error_pptx", error=str(e)))
@@ -519,7 +523,7 @@ def render_advanced_hearing():
     with col_header:
         st.header(f"\U0001f52c {t('mode_advanced')}")
     with col_btn:
-        if st.button(t("change_mode")):
+        if st.button(t("change_mode"), key="btn_change_mode_adv_hearing"):
             reset_session()
             st.rerun()
 
@@ -538,7 +542,7 @@ def render_advanced_hearing():
         _render_conversation()
 
         # Chat input
-        user_input = st.chat_input(t("input_placeholder"))
+        user_input = st.chat_input(t("input_placeholder"), key="chat_input_hearing")
         if user_input:
             # Add user message
             st.session_state.conversation.append({"role": "user", "content": user_input})
@@ -589,7 +593,7 @@ def render_advanced_hearing():
 
             st.session_state.files = files
 
-            if st.button(t("start_analysis"), type="primary", use_container_width=True):
+            if st.button(t("start_analysis"), type="primary", use_container_width=True, key="btn_start_analysis"):
                 orch = _ensure_orchestrator()
                 if orch is None:
                     return
@@ -622,7 +626,7 @@ def render_advanced_proposals():
         _render_conversation()
 
         # Continue chat
-        user_input = st.chat_input(t("additional_message_placeholder"))
+        user_input = st.chat_input(t("additional_message_placeholder"), key="chat_input_proposals")
         if user_input:
             st.session_state.conversation.append({"role": "user", "content": user_input})
             orch = st.session_state.get("orchestrator")
@@ -699,13 +703,13 @@ def render_advanced_proposals():
         # Action buttons
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
-            if st.button(t("run_selected"), type="primary", use_container_width=True):
+            if st.button(t("run_selected"), type="primary", use_container_width=True, key="btn_run_selected"):
                 if not selected:
                     st.warning(t("select_at_least_one"))
                 else:
                     _run_advanced_generate(selected)
         with btn_col2:
-            if st.button(t("run_all"), use_container_width=True):
+            if st.button(t("run_all"), use_container_width=True, key="btn_run_all"):
                 _run_advanced_generate(proposals)
 
 
@@ -737,7 +741,7 @@ def render_advanced_result():
         st.subheader(t("conversation_history"))
         _render_conversation()
 
-        user_input = st.chat_input(t("additional_question_placeholder"))
+        user_input = st.chat_input(t("additional_question_placeholder"), key="chat_input_adv_result")
         if user_input:
             st.session_state.conversation.append({"role": "user", "content": user_input})
             orch = st.session_state.get("orchestrator")
@@ -792,10 +796,10 @@ def render_advanced_result():
                 st.divider()
 
         # Report export
-        _render_report_export()
+        _render_report_export(prefix="advanced")
 
         # Bottom action buttons
-        if st.button(t("back_to_start"), use_container_width=True):
+        if st.button(t("back_to_start"), use_container_width=True, key="btn_back_adv_result"):
             reset_session()
             st.rerun()
 
