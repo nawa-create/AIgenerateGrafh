@@ -749,10 +749,52 @@ def _run_advanced_generate(selected_proposals: list[dict]):
 # -----------------------------------------------------------------------------
 
 def render_advanced_result():
-    left, right = st.columns([3, 2], gap="large")
+    # グラフをメインエリアにフル幅で表示（視認性最優先）
+    st.subheader(t("generated_charts"))
+    charts = st.session_state.get("charts", [])
 
-    with left:
-        st.subheader(t("conversation_history"))
+    if not charts:
+        st.warning(t("no_charts"))
+    else:
+        for i, chart in enumerate(charts):
+            _render_chart(chart, "adv", i)
+
+            # Insights
+            insights_data = chart.get("insights") or chart.get("insight", {})
+            if isinstance(insights_data, dict):
+                insight_list = insights_data.get("insights", [])
+                recommendations = insights_data.get("recommendations", [])
+            else:
+                insight_list = insights_data if isinstance(insights_data, list) else []
+                recommendations = []
+
+            if insight_list or recommendations:
+                insight_col, rec_col = st.columns(2)
+                with insight_col:
+                    for insight in insight_list:
+                        if isinstance(insight, dict):
+                            severity = insight.get("severity", "info")
+                            text = insight.get("message") or insight.get("text", str(insight))
+                        else:
+                            severity = "info"
+                            text = str(insight)
+
+                        if severity == "warning":
+                            st.warning(text)
+                        else:
+                            st.info(text)
+
+                with rec_col:
+                    for rec in recommendations:
+                        st.success(rec if isinstance(rec, str) else str(rec))
+
+            st.divider()
+
+    # Report export
+    _render_report_export(prefix="advanced")
+
+    # 会話履歴を折りたたみで下部に配置
+    with st.expander(t("conversation_history"), expanded=False):
         _render_conversation()
 
         user_input = st.chat_input(t("additional_question_placeholder"), key="chat_input_adv_result")
@@ -771,51 +813,10 @@ def render_advanced_result():
                     )
             st.rerun()
 
-    with right:
-        st.subheader(t("generated_charts"))
-        charts = st.session_state.get("charts", [])
-
-        if not charts:
-            st.warning(t("no_charts"))
-        else:
-            for i, chart in enumerate(charts):
-                _render_chart(chart, "adv", i)
-
-                # Insights
-                insights_data = chart.get("insights") or chart.get("insight", {})
-                if isinstance(insights_data, dict):
-                    insight_list = insights_data.get("insights", [])
-                    recommendations = insights_data.get("recommendations", [])
-                else:
-                    insight_list = insights_data if isinstance(insights_data, list) else []
-                    recommendations = []
-
-                for insight in insight_list:
-                    if isinstance(insight, dict):
-                        level = insight.get("type", "info")
-                        text = insight.get("text", str(insight))
-                    else:
-                        level = "info"
-                        text = str(insight)
-
-                    if level == "warning":
-                        st.warning(text)
-                    else:
-                        st.info(text)
-
-                # Recommendations per chart
-                for rec in recommendations:
-                    st.success(rec if isinstance(rec, str) else str(rec))
-
-                st.divider()
-
-        # Report export
-        _render_report_export(prefix="advanced")
-
-        # Bottom action buttons
-        if st.button(t("back_to_start"), use_container_width=True, key="btn_back_adv_result"):
-            reset_session()
-            st.rerun()
+    # Bottom action buttons
+    if st.button(t("back_to_start"), use_container_width=True, key="btn_back_adv_result"):
+        reset_session()
+        st.rerun()
 
 
 # -----------------------------------------------------------------------------
