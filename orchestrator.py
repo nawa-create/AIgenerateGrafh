@@ -150,9 +150,13 @@ class Orchestrator:
             logger.error("可視化提案に失敗: %s", e)
             return {"data_profile": data_profile, "proposals": [], "error": str(e)}
 
+        proposal_list = proposals.get("proposals", []) if isinstance(proposals, dict) else proposals
+        additional = proposals.get("additional_data_suggestions", []) if isinstance(proposals, dict) else []
+
         return {
             "data_profile": data_profile,
-            "proposals": proposals,
+            "proposals": proposal_list,
+            "additional_data_suggestions": additional,
         }
 
     # ------------------------------------------------------------------
