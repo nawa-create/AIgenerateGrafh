@@ -158,8 +158,8 @@ class CodeGeneratorAgent:
             f"- {name} -> df_{i}" for i, name in enumerate(file_names)
         )
 
-        prompt = f"""あなたはデータ可視化の専門家です。
-以下のデータプロファイルとグラフ提案に基づいて、pandasとplotly.expressを使用したPythonコードを生成してください。
+        prompt = f"""あなたはデータ可視化の専門家であり、認知心理学・知覚心理学に精通しています。
+以下のデータプロファイルとグラフ提案に基づいて、pandasとplotly.expressを使用した**視認性の高い**Pythonコードを生成してください。
 
 ## データプロファイル
 {json.dumps(data_profile, ensure_ascii=False, indent=2, default=str)}
@@ -170,15 +170,68 @@ class CodeGeneratorAgent:
 ## DataFrame変数のマッピング
 {df_mapping}
 
-## 要件
+## 技術要件
 1. DataFrameは既に変数として読み込まれています（ファイル読み込みコードは不要）
 2. 必要に応じてデータ型の変換や欠損値の処理を行ってください
 3. 提案に従ってデータの集計・加工を行ってください
 4. plotly.expressを使用してグラフを作成してください
 5. グラフのラベル、タイトル、凡例はすべて日本語にしてください
-6. 見やすいスタイリング（適切な色、フォントサイズなど）を適用してください
-7. 最終的なplotlyのfigureオブジェクトを変数 `fig` に格納してください
-8. fig.show() は呼び出さないでください
+6. 最終的なplotlyのfigureオブジェクトを変数 `fig` に格納してください
+7. fig.show() は呼び出さないでください
+
+## 視認性・デザイン要件（認知心理学ベース - 必ず全て適用すること）
+
+### 配色ルール
+- メインカラーパレットとして以下を使用:
+  color_discrete_sequence=["#2563EB", "#DC2626", "#059669", "#D97706", "#7C3AED", "#DB2777", "#0891B2", "#4F46E5"]
+- 背景色は白(#FFFFFF)、プロットエリアは薄いグレー(#FAFAFA)
+- グリッド線は薄く: gridcolor="#E5E7EB"
+- 棒グラフの場合: marker_line_color="#1E293B", marker_line_width=0.5 でエッジをつける
+- 折れ線グラフの場合: 線の太さは2.5〜3px
+- 円グラフの場合: hole=0.4（ドーナツ型）にし、明確に区別できる色を使う
+
+### フォント・テキスト
+- タイトル: font_size=20, font_color="#1E293B", bold
+- 軸ラベル: font_size=14, font_color="#374151"
+- 軸目盛り: font_size=12, font_color="#6B7280"
+- 凡例: font_size=13
+- 日本語フォント: "Meiryo, Hiragino Sans, sans-serif"
+
+### レイアウト
+- グラフの高さ: height=520
+- 余白: margin=dict(l=80, r=40, t=80, b=80)
+- タイトル: title_x=0.5（中央寄せ）, title_y=0.95
+- 凡例: 右上またはグラフの下（データ系列が4つ以上の場合は下）
+  legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5) （系列多い場合）
+- ホバーモード: hovermode="x unified" (時系列), hovermode="closest" (その他)
+
+### 認知負荷を下げる工夫
+- 数値軸にカンマ区切り: separatethousands=True
+- Y軸に単位を表示（例: "金額（万円）"、"数量（個）"）
+- データラベルを重要な棒グラフ/円グラフに表示: text_auto=True or textinfo="percent+label"
+- 不要な要素を排除: showgrid=True（主軸のみ）、zeroline=False
+- 時系列のX軸: tickformat="%Y/%m" or "%m/%d"
+
+### ゲシュタルト原理の適用
+- 関連するデータは近接配置（grouped bar chart推奨）
+- 色の一貫性: 同じカテゴリは全グラフで同じ色
+- 図と地の分離: プロットエリアを明確に区別
+
+### update_layoutの適用テンプレート（必ずこれを使うこと）:
+```python
+fig.update_layout(
+    title=dict(text="タイトル", font=dict(size=20, color="#1E293B", family="Meiryo, Hiragino Sans, sans-serif"), x=0.5, y=0.95),
+    font=dict(family="Meiryo, Hiragino Sans, sans-serif", size=13, color="#374151"),
+    plot_bgcolor="#FAFAFA",
+    paper_bgcolor="#FFFFFF",
+    height=520,
+    margin=dict(l=80, r=40, t=80, b=80),
+    xaxis=dict(title=dict(font=dict(size=14, color="#374151")), tickfont=dict(size=12, color="#6B7280"), gridcolor="#E5E7EB", showline=True, linecolor="#D1D5DB"),
+    yaxis=dict(title=dict(font=dict(size=14, color="#374151")), tickfont=dict(size=12, color="#6B7280"), gridcolor="#E5E7EB", showline=True, linecolor="#D1D5DB", separatethousands=True),
+    hoverlabel=dict(bgcolor="white", font_size=13, font_family="Meiryo, Hiragino Sans, sans-serif"),
+    legend=dict(font=dict(size=13)),
+)
+```
 
 Pythonコードのみを```python```ブロックで出力してください。
 """
